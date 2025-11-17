@@ -290,10 +290,22 @@ class RBFNN(BaseEstimator):
             For every output, values of the coefficients for each RBF and value
             of the bias
         """
-        # TODO: Complete the code of the function
+        # Calculate Moore-Penrose pseudo-inverse: R^+ = (R^T * R)^(-1) * R^T
+        # Then: β^T = R^+ * Y
+        # Using numpy's pinv for numerical stability
+        r_pseudo_inv = np.linalg.pinv(r_matrix)
+        
+        # Multiply pseudo-inverse by targets: β^T = R^+ * Y
+        # r_pseudo_inv shape: (num_rbf+1, n_patterns)
+        # y_train shape: (n_patterns, n_outputs)
+        # Result shape: (num_rbf+1, n_outputs)
+        beta_transpose = r_pseudo_inv @ y_train
+        
+        # Transpose to get coefficients in shape (n_outputs, num_rbf+1)
+        coefficients = beta_transpose.T
         
         return coefficients
-
+    
     def _logreg_classification(self) -> LogisticRegression | LogisticRegressionCV:
         """
         Perform logistic regression training for the classification case
@@ -306,6 +318,46 @@ class RBFNN(BaseEstimator):
         logreg: sklearn.linear_model.LogisticRegression or LogisticRegressionCV
             Scikit-learn logistic regression model already trained
         """
-        # TODO: Complete the code of the function
-
+        # Determine regularization type
+        penalty = 'l2' if self.l2 else 'l1'
+        
+        # Handle multi-class classification (softmax is built-in)
+        # y_train might be 1D or 2D, need to handle both
+        if len(self.y_train.shape) == 1:
+            y_train_flat = self.y_train
+        else:
+            # If y is one-hot encoded, convert to class labels
+            y_train_flat = np.argmax(self.y_train, axis=1) if self.y_train.shape[1] > 1 else self.y_train.flatten()
+        
+        if self.logisticcv:
+            # Use LogisticRegressionCV with cross-validation
+            # Cs values: [10^-3, 10^-2, 10^-1, 1, 10^1, 10^2, 10^3]
+            Cs = [1e-3, 1e-2, 1e-1, 1, 10, 100, 1000]
+            
+            logreg = LogisticRegressionCV(
+                Cs=Cs,
+                penalty=penalty,
+                solver='saga',
+                max_iter=10,
+                cv=3,  # stratified k-fold with k=3
+                random_state=self.random_state,
+                multi_class='multinomial' if len(np.unique(y_train_flat)) > 2 else 'auto'
+            )
+        else:
+            # Use regular LogisticRegression
+            # C = 1/eta (inverse of regularization strength)
+            C = 1.0 / self.eta if self.eta != 0 else 1e10
+            
+            logreg = LogisticRegression(
+                C=C,
+                penalty=penalty,
+                solver='saga',
+                max_iter=10,
+                random_state=self.random_state,
+                multi_class='multinomial' if len(np.unique(y_train_flat)) > 2 else 'auto'
+            )
+        
+        # Train the logistic regression on the R matrix
+        logreg.fit(self.r_matrix, y_train_flat)
+        
         return logreg

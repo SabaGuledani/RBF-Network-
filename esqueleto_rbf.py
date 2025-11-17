@@ -204,7 +204,27 @@ class RBFNN(BaseEstimator):
         radii: array, shape (num_rbf,)
             Array with the radius of each RBF
         """
-        # TODO: Complete the code of the function
+        # get the cluster centers
+        centers = self.kmeans.cluster_centers_
+        
+        # calculate pairwise distances between all centers using scipy
+        # pdist returns a condensed distance matrix, squareform converts it to square matrix
+        dist_matrix = squareform(pdist(centers))
+        
+        # For each center j, calculate the average distance to all other centers
+        # Formula: σⱼ = ½ × (1/(n₁-1)) × Σᵢ≠ⱼ ||cⱼ - cᵢ||
+        n_rbf = len(centers)
+        radii = np.zeros(n_rbf)
+        
+        for j in range(n_rbf):
+            # Sum of distances from center j to all other centers (excluding j itself)
+            sum_distances = np.sum(dist_matrix[j, :]) - dist_matrix[j, j]  # Subtract diagonal (0)
+            # Calculate radius: half of average distance
+            if n_rbf > 1:
+                radii[j] = 0.5 * (1.0 / (n_rbf - 1)) * sum_distances
+            else:
+                # Edge case: if only one RBF, set a default small radius
+                radii[j] = 1.0
         
         return radii
 
@@ -227,8 +247,23 @@ class RBFNN(BaseEstimator):
             Matrix with the activation of every RBF for every pattern. Moreover
             we include a last column with ones, which is going to act as bias
         """
-        # TODO: Complete the code of the function
-
+        # square the distances
+        squared_distances = distances ** 2
+        
+        # calculate 2σ² for each RBF 
+        two_sigma_squared = 2 * (self.radii ** 2)
+        
+        # avoid division by zero (if radius is 0, set to small value)
+        two_sigma_squared = np.where(two_sigma_squared == 0, 1e-10, two_sigma_squared)
+        
+        # calculate Gaussian activations: exp(-d²/(2σ²))
+        rbf_activations = np.exp(-squared_distances / two_sigma_squared)
+        
+        # add bias column (ones) at the end
+        n_patterns = rbf_activations.shape[0]
+        bias_column = np.ones((n_patterns, 1))
+        r_matrix = np.hstack([rbf_activations, bias_column])
+        
         return r_matrix
 
     def _invert_matrix_regression(

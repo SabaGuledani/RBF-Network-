@@ -230,7 +230,15 @@ def main(
         print(f"Running on {dataset_name} - seed: {random_state}.")
         np.random.seed(random_state)
 
-        # TODO: Read the data
+        # read the data
+        data = read_data(
+            dataset_filename=dataset_filename,
+            standarize=standarize,
+            random_state=random_state,
+            classification=classification,
+            fairness=fairness,
+            prediction_mode=(pred is not None)
+        )
 
         if not fairness and pred is None:
             X_train, y_train, X_test, y_test = data
@@ -247,8 +255,18 @@ def main(
             ) = data
 
         if pred is None:  # Train the model
-            # TODO: Create the object
-            # TODO: Train the model
+            # create rbfnn object
+            rbf = RBFNN(
+                classification=classification,
+                ratio_rbf=ratio_rbf,
+                l2=l2,
+                eta=eta,
+                logisticcv=logisticcv,
+                random_state=random_state
+            )
+            
+            # train the model
+            rbf.fit(X_train, y_train)
 
             if model_filename:
                 dir_name = f"{model_filename}/{dataset_name}/{random_state}.p"
@@ -259,12 +277,51 @@ def main(
             dir_name = f"{model_filename}/{dataset_name}/{random_state}.p"
             rbf = load(dir_name, random_state)
 
-        # TODO: Predict the output using the trained model
+        # predict the output using the trained model
+        preds_train = rbf.predict(X_train)
+        preds_test = rbf.predict(X_test)
+
+        # handle prediction shapes for metrics
+        # ensure y is in correct format for metrics
+        if len(y_train.shape) > 1 and y_train.shape[1] == 1:
+            y_train_flat = y_train.flatten()
+        else:
+            y_train_flat = y_train
+            
+        if len(y_test.shape) > 1 and y_test.shape[1] == 1:
+            y_test_flat = y_test.flatten()
+        else:
+            y_test_flat = y_test
+        
+        # ensure predictions are in correct format
+        if len(preds_train.shape) > 1:
+            if preds_train.shape[1] == 1:
+                preds_train_flat = preds_train.flatten()
+            else:
+                # multi-class: use argmax if needed
+                preds_train_flat = preds_train.flatten() if classification else preds_train
+        else:
+            preds_train_flat = preds_train
+            
+        if len(preds_test.shape) > 1:
+            if preds_test.shape[1] == 1:
+                preds_test_flat = preds_test.flatten()
+            else:
+                # multi-class: use argmax if needed
+                preds_test_flat = preds_test.flatten() if classification else preds_test
+        else:
+            preds_test_flat = preds_test
 
         if pred is not None:
             preds_kaggle = rbf.predict(X_test_kaggle)
+            # flatten kaggle predictions if needed
+            if len(preds_kaggle.shape) > 1 and preds_kaggle.shape[1] == 1:
+                preds_kaggle = preds_kaggle.flatten()
+            elif len(preds_kaggle.shape) > 1:
+                preds_kaggle = preds_kaggle.flatten()
+            
             dir_name = f"{model_filename}/{dataset_name}/predictions_{pred}.csv"
-            # include index in the first column from 0 to length preds_test
+            # include index in the first column from 1 to length preds_kaggle
             preds_kaggle_with_index = np.column_stack(
                 (np.arange(1, len(preds_kaggle)+1), preds_kaggle)
             )
@@ -281,17 +338,17 @@ def main(
         train_results_per_seed = {
             "seed": random_state,
             "partition": "Train",
-            "MSE": mean_squared_error(y_train, preds_train),
+            "MSE": mean_squared_error(y_train_flat, preds_train_flat),
         }
         test_results_per_seed = {
             "seed": random_state,
             "partition": "Test",
-            "MSE": mean_squared_error(y_test, preds_test),
+            "MSE": mean_squared_error(y_test_flat, preds_test_flat),
         }
 
         if classification:
-            train_results_per_seed["CCR"] = accuracy_score(y_train, preds_train) * 100
-            test_results_per_seed["CCR"] = accuracy_score(y_test, preds_test) * 100
+            train_results_per_seed["CCR"] = accuracy_score(y_train_flat, preds_train_flat) * 100
+            test_results_per_seed["CCR"] = accuracy_score(y_test_flat, preds_test_flat) * 100
 
         # Fairness evaluation
         if fairness:
@@ -435,20 +492,102 @@ def read_data(
         Array containing the discriminative attribute for the testing patterns (only
         if fairness is set to True)
     """
-    # TODO: Complete the code of the function
-
+    # read csv file using pandas (no headers)
+    data = pd.read_csv(dataset_filename, header=None)
+    data = data.values  # convert to numpy array
+    
+    # split into X (all columns except last) and y (last column)
+    X_all = data[:, :-1]  # all input features
+    y = data[:, -1]  # output
+    
+    # handle fairness mode: gender is in the last column of input variables
     if fairness:
-        # Group label (we assume it is in the last column of X)
-        # 1 Women / 0 Men
-        lu = np.unique(X_train[:, -1])
-        X_train_disc = np.where(X_train[:, -1] == lu[1], "Women", "Men")
-        X_test_disc = np.where(X_test[:, -1] == lu[1], "Women", "Men")
-
+        # gender is the last column of input features
+        X_gender = X_all[:, -1].copy()
+        X = X_all[:, :-1]  # remove gender from X for training
+    else:
+        X = X_all
+    
+    # split into train and test sets
+    # test_size=0.25, shuffle=True, stratified for classification
+    stratify_param = y if classification else None
+    
+    # for fairness mode, include gender in the split to get matching indices
+    if fairness:
+        # split X and X_gender together to ensure matching indices
+        X_train, X_test, y_train, y_test, X_gender_train, X_gender_test = train_test_split(
+            X, y, X_gender,
+            test_size=0.25,
+            shuffle=True,
+            stratify=stratify_param,
+            random_state=random_state
+        )
+        # convert to "Men"/"Women" labels (0 = Men, 1 = Women)
+        X_train_disc = np.where(X_gender_train == 1, "Women", "Men")
+        X_test_disc = np.where(X_gender_test == 1, "Women", "Men")
+    else:
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y,
+            test_size=0.25,
+            shuffle=True,
+            stratify=stratify_param,
+            random_state=random_state
+        )
+    
+    # standardize if requested
+    scaler_X = None
+    scaler_y = None
+    if standarize:
+        # for regression: standardize both X and y
+        # for classification: standardize only X
+        scaler_X = StandardScaler()
+        X_train = scaler_X.fit_transform(X_train)
+        X_test = scaler_X.transform(X_test)
+        
+        if not classification:
+            # standardize y for regression
+            scaler_y = StandardScaler()
+            y_train = scaler_y.fit_transform(y_train.reshape(-1, 1)).flatten()
+            y_test = scaler_y.transform(y_test.reshape(-1, 1)).flatten()
+    
+    # convert to numpy arrays and ensure proper shapes
+    X_train = np.array(X_train)
+    X_test = np.array(X_test)
+    y_train = np.array(y_train)
+    y_test = np.array(y_test)
+    
+    # ensure y is 2D if needed (for multi-output)
+    if len(y_train.shape) == 1:
+        y_train = y_train.reshape(-1, 1)
+    if len(y_test.shape) == 1:
+        y_test = y_test.reshape(-1, 1)
+    
+    # handle prediction mode (kaggle dataset)
+    if prediction_mode:
+        kaggle_dataset_path = dataset_filename.replace(".csv", "_kaggle.csv")
+        data_kaggle = pd.read_csv(kaggle_dataset_path, header=None)
+        data_kaggle = data_kaggle.values
+        
+        # kaggle dataset has same structure as training X (all input features)
+        X_test_kaggle = data_kaggle
+        
+        # if fairness mode, remove gender column from kaggle data
+        if fairness:
+            X_test_kaggle = X_test_kaggle[:, :-1]  # remove last column (gender)
+        
+        # standardize kaggle data if needed
+        if standarize and scaler_X is not None:
+            X_test_kaggle = scaler_X.transform(X_test_kaggle)
+        
+        X_test_kaggle = np.array(X_test_kaggle)
+    
+    # return appropriate tuple based on mode
+    if fairness:
         return X_train, y_train, X_test, y_test, X_train_disc, X_test_disc
-
-    if prediction_mode is not None:
-        return X_train, y_train, X_test, y_test, X_test_kaggle  # KAGGLE
-
+    
+    if prediction_mode:
+        return X_train, y_train, X_test, y_test, X_test_kaggle
+    
     return X_train, y_train, X_test, y_test
 
 

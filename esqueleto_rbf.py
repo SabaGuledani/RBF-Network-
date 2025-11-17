@@ -2,6 +2,7 @@ import numpy as np
 from sklearn.base import BaseEstimator
 from sklearn.cluster import KMeans
 from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
+from sklearn.metrics import accuracy_score, mean_squared_error
 from scipy.spatial.distance import pdist, squareform, cdist
 
 
@@ -25,7 +26,7 @@ class RBFNN(BaseEstimator):
         ratio_rbf: float
             Ratio (as a fraction of 1) indicating the number of RBFs
             with respect to the total number of patterns
-        l2: float
+        l2: bool
             True if we want to use L2 regularization for logistic regression
             False if we want to use L1 regularization for logistic regression
         eta: float
@@ -65,27 +66,27 @@ class RBFNN(BaseEstimator):
         self.num_rbf = int(self.ratio_rbf * y.shape[0])
         print(f"Number of RBFs used: {self.num_rbf}")
         
-        # 1. Clustering: Apply KMeans to establish RBF centers
+        # apply kmeans clustering to establish rbf centers
         self.kmeans = self._clustering(X, y)
 
-        # 2. Calculate radii using heuristic formula
+        # calculate radii using heuristic formula
         self.radii = self._calculate_radii()
 
-        # 3. Calculate distances from each training pattern to each RBF center
+        # calculate distances from each training pattern to each rbf center
         distances = cdist(X, self.kmeans.cluster_centers_, metric='euclidean')
 
-        # 4. Calculate R matrix (RBF activations + bias column)
+        # calculate r matrix (rbf activations + bias column)
         self.r_matrix = self._calculate_r_matrix(distances)
 
-        # 5. Store y_train for potential use in classification
+        # store y_train for classification
         self.y_train = y
 
-        # 6. Calculate output layer weights
+        # calculate output layer weights
         if self.classification:
-            # For classification: use logistic regression
+            # use logistic regression for classification
             self.logreg = self._logreg_classification()
         else:
-            # For regression: use Moore-Penrose pseudo-inverse
+            # use moore-penrose pseudo-inverse for regression
             self.coefficients = self._invert_matrix_regression(self.r_matrix, y)
 
         self.is_fitted = True
@@ -110,16 +111,22 @@ class RBFNN(BaseEstimator):
         if not self.is_fitted:
             raise ValueError("Model is not fitted yet.")
 
-        # 2. clustering
-        # TODO: Call the appropriate function
+        # 1. calculate distances from test patterns to RBF centers
+        distances = cdist(X, self.kmeans.cluster_centers_, metric='euclidean')
 
-        # 4. radii for test set
-        # TODO: Call the appropriate function
+        # 2. calculate R matrix for test set (RBF activations + bias column)
+        r_matrix_test = self._calculate_r_matrix(distances)
 
+        # 3. make predictions based on problem type
         if self.classification:
-            # TODO: Call the appropriate function
+            # for classification: use logistic regression
+            predictions = self.logreg.predict(r_matrix_test)
         else:
-            # TODO: Call the appropriate function 
+            # for regression: multiply coefficients by R matrix
+            # coefficients shape: (n_outputs, num_rbf+1)
+            # r_matrix_test shape: (n_patterns, num_rbf+1)
+            # predictions shape: (n_patterns, n_outputs)
+            predictions = r_matrix_test @ self.coefficients.T
 
         return predictions
 
@@ -141,11 +148,22 @@ class RBFNN(BaseEstimator):
             accuracy or mean squared error depending on the classification
             parameter
         """
+        # get predictions
+        predictions = self.predict(X)
+        
         if self.classification:
-            # TODO: Return the appropriate values
-
+            # for classification: return accuracy score
+            # handle one-hot encoded y if needed
+            if len(y.shape) > 1 and y.shape[1] > 1:
+                y_true = np.argmax(y, axis=1)
+            else:
+                y_true = y.flatten()
+            
+            return accuracy_score(y_true, predictions)
         else:
-            # TODO: Return the appropriate values
+            # for regression: return negative mean squared error
+            # (sklearn convention: higher is better, so we negate MSE)
+            return -mean_squared_error(y, predictions)
 
     def _init_centroids_classification(
         self, X_train: np.array, y_train: np.array
@@ -176,7 +194,6 @@ class RBFNN(BaseEstimator):
         
         # get unique classes
         unique_classes = np.unique(y_labels)
-        n_classes = len(unique_classes)
         
         # calculate how many centroids per class (proportional to class distribution)
         centroids_per_class = []
@@ -185,7 +202,7 @@ class RBFNN(BaseEstimator):
         for i, class_label in enumerate(unique_classes):
             class_count = np.sum(y_labels == class_label)
             if i == len(unique_classes) - 1:
-                # last class gets the remaining centroids
+                # last class gets remaining centroids
                 n_centroids = remaining
             else:
                 # proportional allocation
@@ -201,7 +218,6 @@ class RBFNN(BaseEstimator):
             class_indices = np.where(y_labels == class_label)[0]
             
             # randomly select n_centroids patterns from this class
-            np.random.seed(self.random_state)
             selected_class_indices = np.random.choice(
                 class_indices, 
                 size=min(n_centroids, len(class_indices)), 
@@ -222,7 +238,7 @@ class RBFNN(BaseEstimator):
                 )
                 selected_indices.extend(additional)
         
-        # get the selected patterns as centroids
+        # return selected patterns as centroids
         centroids = X_train[selected_indices[:self.num_rbf]]
         
         return centroids
@@ -249,34 +265,35 @@ class RBFNN(BaseEstimator):
             KMeans object after the clustering
         """
         if self.classification:
-            # For classification: use stratified initialization
+            # use stratified initialization for classification
             init_centroids = self._init_centroids_classification(X_train, y_train)
             kmeans = KMeans(
                 n_clusters=self.num_rbf,
                 init=init_centroids,
-                n_init=1,  # only one centroid initialisation
+                n_init=1,
                 max_iter=500,
                 random_state=self.random_state
             )
         else:
-            # for regression: random initialization
+            # use random initialization for regression
             kmeans = KMeans(
                 n_clusters=self.num_rbf,
-                init='random',  # random initialization
-                n_init=1,  # only one centroid initialisation
+                init='random',
+                n_init=1,
                 max_iter=500,
                 random_state=self.random_state
             )
         
-        # fit KMeans to the training data
+        # fit kmeans to the training data
         kmeans.fit(X_train)
         
         return kmeans
+
     def _calculate_radii(self) -> np.array:
         """
         Obtain the value of the radii after clustering
 
-        This methods is used to heuristically obtain the radii of the RBFs
+        This method is used to heuristically obtain the radii of the RBFs
         based on the centers
 
         Returns
@@ -287,8 +304,7 @@ class RBFNN(BaseEstimator):
         # get the cluster centers
         centers = self.kmeans.cluster_centers_
         
-        # calculate pairwise distances between all centers using scipy
-        # pdist returns a condensed distance matrix, squareform converts it to square matrix
+        # calculate pairwise distances between all centers
         dist_matrix = squareform(pdist(centers))
         
         # for each center j, calculate the average distance to all other centers
@@ -297,13 +313,13 @@ class RBFNN(BaseEstimator):
         radii = np.zeros(n_rbf)
         
         for j in range(n_rbf):
-            # sum of distances from center j to all other centers (excluding j itself)
-            sum_distances = np.sum(dist_matrix[j, :]) - dist_matrix[j, j]  # Subtract diagonal (0)
-            # calculate radius: half of average distance
+            # sum distances from center j to all other centers
+            sum_distances = np.sum(dist_matrix[j, :]) - dist_matrix[j, j]
+            # calculate radius as half of average distance
             if n_rbf > 1:
                 radii[j] = 0.5 * (1.0 / (n_rbf - 1)) * sum_distances
             else:
-                # edge case: if only one RBF, set a default small radius
+                # edge case: only one rbf, use default radius
                 radii[j] = 1.0
         
         return radii
@@ -370,18 +386,13 @@ class RBFNN(BaseEstimator):
             For every output, values of the coefficients for each RBF and value
             of the bias
         """
-        # calculate Moore-Penrose pseudo-inverse: R^+ = (R^T * R)^(-1) * R^T
-        # then: β^T = R^+ * Y
-        # using numpy's pinv for numerical stability
+        # calculate moore-penrose pseudo-inverse
         r_pseudo_inv = np.linalg.pinv(r_matrix)
         
-        # multiply pseudo-inverse by targets: β^T = R^+ * Y
-        # r_pseudo_inv shape: (num_rbf+1, n_patterns)
-        # y_train shape: (n_patterns, n_outputs)
-        # result shape: (num_rbf+1, n_outputs)
+        # multiply pseudo-inverse by targets to get coefficients
         beta_transpose = r_pseudo_inv @ y_train
         
-        # transpose to get coefficients in shape (n_outputs, num_rbf+1)
+        # transpose to get coefficients in correct shape
         coefficients = beta_transpose.T
         
         return coefficients
@@ -398,20 +409,18 @@ class RBFNN(BaseEstimator):
         logreg: sklearn.linear_model.LogisticRegression or LogisticRegressionCV
             Scikit-learn logistic regression model already trained
         """
-        # Determine regularization type
+        # determine regularization type
         penalty = 'l2' if self.l2 else 'l1'
         
-        # Handle multi-class classification (softmax is built-in)
-        # y_train might be 1D or 2D, need to handle both
+        # handle y_train format (1D or 2D, one-hot encoded or not)
         if len(self.y_train.shape) == 1:
             y_train_flat = self.y_train
         else:
-            # If y is one-hot encoded, convert to class labels
+            # convert one-hot encoded y to class labels
             y_train_flat = np.argmax(self.y_train, axis=1) if self.y_train.shape[1] > 1 else self.y_train.flatten()
         
         if self.logisticcv:
-            # Use LogisticRegressionCV with cross-validation
-            # Cs values: [10^-3, 10^-2, 10^-1, 1, 10^1, 10^2, 10^3]
+            # use logisticregressioncv with cross-validation
             Cs = [1e-3, 1e-2, 1e-1, 1, 10, 100, 1000]
             
             logreg = LogisticRegressionCV(
@@ -419,13 +428,12 @@ class RBFNN(BaseEstimator):
                 penalty=penalty,
                 solver='saga',
                 max_iter=10,
-                cv=3,  # stratified k-fold with k=3
+                cv=3,
                 random_state=self.random_state,
                 multi_class='multinomial' if len(np.unique(y_train_flat)) > 2 else 'auto'
             )
         else:
-            # Use regular LogisticRegression
-            # C = 1/eta (inverse of regularization strength)
+            # use regular logisticregression
             C = 1.0 / self.eta if self.eta != 0 else 1e10
             
             logreg = LogisticRegression(
@@ -437,7 +445,7 @@ class RBFNN(BaseEstimator):
                 multi_class='multinomial' if len(np.unique(y_train_flat)) > 2 else 'auto'
             )
         
-        # Train the logistic regression on the R matrix
+        # train logistic regression on the r matrix
         logreg.fit(self.r_matrix, y_train_flat)
         
         return logreg

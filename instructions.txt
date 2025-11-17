@@ -1,0 +1,674 @@
+Lab assignment 3: Radial basis functions neural
+ networks
+ Academic year 2025/2026
+ Subject: Introduction to computational models
+ 4th course Computer Science Degree (University of C´ordoba)
+ 4th November 2025
+ Abstract
+ This lab assignment serves as familiarisation for the student with radial basis functions
+ (RBF) neural networks. In this way, a RBF neural network will be developed, using Python and
+ the scikit-learn library 1. In this sense, the assignment will also serve as familiarisation
+ with external libraries, widely used in machine learning (numpy, pandas...). In addition, we
+ will introduce the problem of bias in machine learning models through fairlearn2. The
+ student must implement the algorithm and analyse the effect of different parameters over a
+ given set of real-world datasets. Delivery will be made using the task in Moodle authorized for
+ this purpose. All deliverables must be uploaded in a single compressed file indicated in this
+ document. The deadline for the submission is 1st December 2025. In case two students submit
+ copied assignments, neither of them will be scored.
+ 1 Introduction
+ The work to be done in this lab assignment consists in implementing a RBF neural network with
+ a training stage divided into three steps:
+ 1. Application of a clustering algorithm which will be used to establish the centres of the RBF
+ (input-to-hidden-layer’s weights).
+ 2. TheRBFradiumadjustmentis donebymeansofasimpleheuristic (distance average to the
+ rest of the centres).
+ 3. Hidden-to-output’s weights learning:
+ • Forregression problems, using the Moore-Penrose’s pseudo-inverse.
+ • Forclassification problems, using a logistic regression linear model.
+ The student should develop a Python’s script able to train a RBF neural network with the
+ aforementioned characteristics. This programme will be used to train models able to classify as
+ accurate as possible a set of databases available in Moodle. Also, an analysis about the obtained
+ results will be included. For the Triage dataset, we will also perform an algorithmic bias analysis
+ to contrast the behaviour of the models in different demographic groups. This analysis will
+ greatly influence the qualification of this assignment.
+ In the statement of the assignment, indicative values are provided for all parameters. How
+ever, it will be positively evaluated if the student finds other values for these parameters able to
+ achieve better results.
+ 1http://scikit-learn.org/
+ 2https://fairlearn.org/
+ 1
+Section 2 describes a series of general guidelines when implementing the training algorithm
+ for RBF neural networks. Section 3 explains the experiments to be carried out once the algorithm
+ is implemented. Finally, section 4 specifies the files to be delivered for this assignment.
+ 2 ImplementationoftheRBFneuralnetworktrainingalgorithm
+ 2.1 Model’s architecture to be considered
+ The RBFneural network models should have the following architecture:
+ • Aninputlayer with as many neurons as input variables the dataset has.
+ • Ahiddenlayer with a number of neurons specified by the user. It is important to highlight
+ that, in the two previous lab assignment, the number of hidden layer was variable. How
+ever, for this lab assignment, we are going to consider just one hidden layer. The type of all
+ the neurons in the hidden layer will be RBF (in contrast to the sigmoidal neurons used in
+ the previous lab assignments).
+ • Anoutputlayer with as many neurons as output variables the dataset has.– Whenconsideringregressiondatasets, allthe outputneuronswillbelinear(i.e. similar
+ to the sigmoidal neurons without the application of the
+ 1
+ 1 +e−x 
+transformation).– Whenconsidering classification datasets, all the output neurons will be softmax. The
+ softmax function is already implemented by the logistic regression algorithm used for
+ adjusting the weights of the output layer.
+ 2.2 Weights adjustment
+ The instructions given in the class slides should be followed so that the training is carried out as
+ follows:
+ 1. Application of a clustering algorithm that will serve to establish the centres of the RBF
+ (input-to-output layer weights). For classification problems, the centroid initialisation will
+ be random and stratified, n1 patterns3. For regression problems, n1 will be randomly se
+lected. After initialising the centroids, the sklearn.cluster.KMeans class will be used,
+ withonlyonecentroidinitialisation (n
+ init)andamaximumof500iterations(max
+ iter).
+ 2. To adjust the radium of the RBF, a simple heuristic will be applied (the half of the distance
+ average to the rest of the centres). This is, the radium of the j-th neuron will be4:
+ n
+ σj =
+ 1
+ 2 · (n1 −1) i̸=j 
+∥cj −ci∥ =
+ 1
+ 2 · (n1 −1) i̸=j
+ 3. Learning the weights from hidden-to-output layer.
+ d=1
+ (cjd − cid)2.
+ (1)
+ • Forregression problem, it is done using the Moore-Penrose pseudo-inverse. This is:
+ βT
+ ((n1+1)× k) =
+ (R+)((n1+1)× N) Y(N× k) =
+ = RT
+ ((n1+1)× N) ×R(N× (n1+1))
+ −1
+ RT
+ ((n1+1)× N)Y(N× k)
+ 3For this, the sklearn.model
+ selection.train
+ test
+ (2)
+ (3)
+ split method can be used. It performs one or more
+ stratified dataset partitions, this is, keeping the ratio of patterns belonging to each class in the original dataset
+ https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.train_test_
+ split.html
+ 4Consider using the functions pdist and squareform of scipy to obtain the distances matrix
+ 2
+where R is the matrix containing the outputs of the RBF neurons, β is a matrix con
+taining a vector of parameters for eachoftheoutputstobepredicted, andY isamatrix
+ with the target outputs. To perform these operations, we will use the matrix functions
+ of numpy, which is a dependence of scikit-learn.
+ • For classification problems, it is done using a logistic regression linear model. Using
+ the sklearn.linear
+ model.LogisticRegression class, providing a value for
+ the C parameter in order to apply regularisation. Note that in this library what we
+ are specifying is the cost value C (importance of the approximation error versus the
+ regularisation error), in such a way that η = 1
+ C. We will use the saga solver and
+ maximumofiterations (max
+ 3 Experiments
+ iter) of 10.
+ We will test different configurations of the neural network and execute each configuration with
+ f
+ ive seeds (1, 2, 3, 4 and 5). Based on the results obtained, the average and standard deviation of
+ the error will be obtained. For the regression problems, only the MSE will be shown. However,
+ for classification problems, the CCR (the percentage of correct classified patterns) will be shown.
+ To analyse algorithmic bias in the Triage dataset we will use the false positive rate, which is
+ the most appropriate metric for this particular problem, but you can optionally include the false
+ negative rate.
+ To assess how the implemented algorithm works, we will run it on three different regression
+ datasets:
+ • Sin-function dataset: This dataset is composed of 120 training patterns and 41 testing pat
+terns. It has been obtained by adding some random noise to the sin function (see Figure 1).
+ sin.dat
+ 1
+ 0.9
+ 0.8
+ 0.7
+ 0.6
+ 0.5
+ Y
+ 0.4
+ 0.3
+ 0.2
+ 0.1
+ 0-1-0.8-0.6-0.4-0.2
+ 0
+ X
+ 0.2
+ 0.4
+ 0.6
+ 0.8
+ 1
+ FINAL*
+ SIN(X)*
+ Figure 1: Data representation of the data included in the sin-function estimation problem.
+ • Quakedataset: this dataset is composed by 1633 training patterns and 546 testing patterns. It
+ corresponds to a database in which the objective is to find out the strength of an earthquake
+ (measured on the Richter scale). As input variables, we use the depth of focus, the latitude
+ at which it occurs and the longitude 5.
+ 5see https://sci2s.ugr.es/keel/dataset.php?cod=75 to seek more information.
+ 3
+• Significant wave height (SWH): The dataset (buoy 46025) used in this study comes from
+ time series of significant wave height (SWH) recorded by ocean buoys from the National
+ Data Buoy Centre (NDBC) located on the west coast of the United States (see Figure 2).
+ SWH forecasting is an active area in renewable energy research. For this assignement,
+ one station has been considered (ID 46025). Each buoy provides hourly measurements of
+ oceanic and meteorological variables, from which supervised examples were constructed
+ where the target variable is wave height with a six-hour forecast horizon (WVHT-6h). De
+tails of the dataset can be found in C. Pel´aez-Rodr´ıguez et. al6. The predictive variables
+ used are listed in Table 1.
+ Figure 2: Geographic locations of the stations considered for target and predictors. Source
+ https://doi.org/10.1016/j.apor.2024.104273
+ Table 1: Predictive variables used in case studies (46025 samples)
+ Variable Description
+ Min
+ Max
+ air
+ omega
+ pr wtr
+ pres
+ rhum
+ uwnd
+ vwnd
+ Air temperature (K)
+ Omegavertical velocity (Pa/s)
+ Precipitable water content (kg/m2)
+ Pressure (Pa)
+ Relative humidity (%)
+ South-north wind speed (m/s)
+ West-east wind speed (m/s)
+ WVHT Currentwaveheight(m)
+ 277.96
+ −0.37
+ 2.30
+ 305.96
+ 0.30
+ 46.11
+ 95300.82 98856.65
+ 18.98
+ −7.88
+ −7.47
+ 0.42
+ 100.00
+ 11.68
+ 12.28
+ 3.26
+ Andtwoclassification datasets:
+ • Triage: this dataset was published on Kaggle in 2022 by Hossam Ahmed Aly 7. It is based
+ on three individual datasets from three urgent illnesses/injuries, each one with its own
+ features and symptoms recorded for each patient. Then, they were merged to know what
+ 6https://doi.org/10.1016/j.apor.2024.104273
+ 7https://www.kaggle.com/datasets/hossamahmedaly/patient-priority-classification
+ 4
+are the most severe symptoms for each illness and give them priority of treatment. The
+ three original datasets include:– Diabetes: all types of diabetes can lead to excess sugar in the blood, and this can result
+ in serious health problems.– Heart Attack: it occurs when the flow of blood to the heart is severely reduced or
+ blocked. The blockage is usually due to build-up of fat, cholesterol and other sub
+stances in the heart (coronary) arteries.– Stroke: the blood supply to part of the brain is interrupted or reduced, preventing
+ brain tissue from getting oxygen and nutrients. Brain cells begin to die in minutes.
+ The objective is to perform a triage based on the data provided. Triage is the prioritization
+ of patient care (or victims during a disaster) based on illness/injury, symptoms, severity,
+ prognosis and resource availability. The purpose of triage is to identify patients needing
+ immediate resuscitation, to assign patients to a predesignated patient care area (prioritiz
+ing their care), and/or to initiate diagnostic/therapeutic measures as appropriate. For this
+ dataset, the patients are assigned one of two classes: non-priority (class 0) and priority
+ (class 1). There are total of 16 input variables: age, gender, chest pain type, blood pres
+sure, cholesterol, max heart rate, exercise angina, plasma glucose, skin thickness, insulin,
+ bmi, diabetes pedigree, hypertension, heart disease, Residence type, smoking status. The
+ target variable is whether the patient should have priority or not.
+ 1. age: numerical age.
+ 2. chest pain type: categorical
+ 3. blood pressure: numerical
+ 4. cholesterol: numerical
+ 5. maxheart rate: numerical
+ 6. exercise angina: binary
+ 7. plasma glucose: numerical
+ 8. skin thickness: numerical
+ 9. insulin: numerical
+ 10. bmi: numerical
+ 11. diabetes pedigree: numerical
+ 12. hypertension: binary
+ 13. heart disease: binary
+ 14. Residence type: binary (0 means ’Urban’ and 1 means ’Rural’)
+ 15. smoking status: categorical (0 means ’never smoked’, 1 means ’formerly smoked’, 2
+ means ’smokes’ and 3 means ’Unknown’)
+ 16. gender: binary gender (0 means ’Male’ and 1 means ’Female’).
+ We will have to make an algorithmic bias analysis to see if there are notable differences
+ according to the gender variables (differences between males and females), when assigning
+ priority. You should also interpret what that bias is telling us. Note that the input vari
+ables of this dataset have not been previously standarized, therefore you have to do it. The
+ gender variable is the last one of the input variables in the csv.
+ • noMNIST dataset: originally, this dataset was composed by 200.000 training patterns and
+ 10.000 test patterns, with a total of 10 classes. Nevertheless, for this lab assignment, the size
+ of the dataset has been reduced in order to reduce the computational cost. In this sense,
+ the dataset is composed by 900 training patterns and 300 test patterns. It includes a set of
+ 5
+letters (from a to f) written with different typologies or symbols. They are adjusted to a
+ squared grid of 28 × 28 pixels. The images are in grey scale in the interval [−1.0;+1.0]8.
+ Each of the pixels is an input variable (with a total of 28 × 28 = 784 input variables) and
+ the class corresponds to a written letter (a, b, c, d, e y f, with a total of 6 classes). Figure
+ 3 represents a subset of 180 training patterns, whereas figure 4 represents a subset of 180
+ letters from the test set. Moreover, all the letters are arranged and available in Moodle in
+ the files train
+ img
+ nomnist.tar.gz and test
+ img
+ nomnist.tar.gz, respectively.
+ Figure 3: Subset of letters belonging to the training dataset.
+ Figure 4: Subset of letters belonging to the test dataset.
+ All these datasets are in csv format. The number of holdout partitions is equal to the number
+ of seeds included by the user (parameter n). For this, the class sklearn.model
+ selection
+ .train
+ test
+ split can be used. The size of the test set will be 25% (i.e., test
+ size=0.25).
+ Moreover, patters will be shuffled using the parameter suffle=True and, for classification
+ problems, train and test partitions have to be stratified.
+ The average and standard deviation of two measures (regression) or four measures (classifi
+cation) should be computed:
+ • Regression: average and standard deviation of training and testing MSE.
+ • Classification: average and standard deviation of training and testing CCR.
+ At least, the following configurations should be tried:
+ • Network architecture:– Forall the datasets, consider a number hidden neurons (n1) equal to the 5%, 15%, 25%
+ and 50% of the total number of patterns of the dataset. In this stage, for classification
+ problems use L1 regularisation and η = 10−5.
+ • Forthe classification problems, once decided the best architecture, try the following values
+ for η: η: η = 10−3, η = 10−2, η = 10−1, η = 1, η = 101, η = 102, η = 103, along with the two
+ types of regularisation (L2 y L1). What is happening? Compute the difference in number of
+ 8Check http://yaroslavvb.blogspot.com.es/2011/09/notmnist-dataset.html for more information.
+ 6
+coefficients for Triage and noMNIST dataset when the regularisation type is modified (L2
+ vs L1)9.
+ • Implement the option-v so that, in classification problems, the classifier is trained using
+ sklearn.linear
+ model.LogisticRegressionCVinsteadofusingtheclasssklearn.
+ linear
+ model.LogisticRegression. This will automatically calculate (without look
+ing at the test values), the optimal value of η. Set the object so that the values to be tested
+ (Cs) are η = 10−3, η = 10−2, η = 10−1, η = 1, η = 101, η = 102 and η = 103 and that the
+ optimization is done using a stratified k-fold with k = 3. Compare, on the two classifica
+tion datasetss, the results you get using this strategy (under the assumption of L1 and the
+ best ratio of RBFs obtained above). Compare also the values you choose for eta with those
+ obtained by the experimentation of the previous point. What can the differences be due to?
+ • For one of the classification problems, run the script considering the problem as if it was
+ regression (i.e. the classification parameter is False and compute the CCR rounding the
+ predictions to the closest integer). What is happening for this situation?
+ As aguideline, the training and generalisation errors over 5 runs achieved by a linear regres
+sion (using sklearn) over the three regression datasets is shown:
+ • sin dataset: MSEtrain = 0.029729;MSEtest = 0.036545.
+ • Quake dataset: MSEtrain = 0.029648;MSEtest = 0.028939.
+ • SWHdataset: MSEtrain = 0.002194;MSEtest = 0.001842.
+ Also, the training CCRandthetestCCR,alsoover5runsachievedbyalogisticregression(using
+ sklearn) over the two classification datasets is shown:
+ • Triage dataset: CCRtrain = 95.4407%;CCRtest = 95.9707%.
+ • noMNISTdataset: CCRtrain = 100.000000%;CCRtest = 82.666667%.
+ The student should be able to improve this error values with some of the configurations.
+ 3.1 File format
+ read
+ The files containing the datasets will be CSV, in such a way that the values will be separated
+ by commas. In this sense, there are no headers. In order to read the files properly, the function
+ csv from pandas should be used. In the Triage database, the ’gender’ variable has been
+ placed in the last column so that it can be easily processed and integrated with fairlearn.
+ 4 Deliverables
+ The files to be submitted will be the following:
+ • Report in a pdf file describing the programme implemented, including results, tables and
+ their analysis.
+ • Python script.
+ 9The coefficients are in the coef
+ attribute of the logistic regression object. Consider that if the absolute value of a
+ coefficient is lower than 10−5, then the coefficient is null
+ 7
+4.1 Report
+ The report for this lab assignment must include, at least, the following content:
+ • Cover with the lab assignment number, its title, subject, degree, faculty department, uni
+versity, academic year, name, DNI and email of the student
+ • Index of the content with page numbers.
+ • Description of the steps for the RBF training stage (1 page maximum).
+ • Experiments and results discussion:– Brief description of the datasets used.– Brief description of the values of the parameters considered.– Results obtained, according to the format specified in the previous section.– Discussion/analysis of the results. The analysis must be aimed at justifying the re
+sults obtained instead of merely describing the tables. This analysis should include
+ algorithmic bias assessment in Triage. Take into account that this part is extremely de
+cisive in the lab assignment qualification. The inclusion of the following comparison
+ items will be appreciated:
+ * Test confusion matrix of the best neural network model achieved for the noMNIST
+ database. Analysing the errors, including the images of some letters for which
+ the model mistakes, to visually check if they are confusing. Comparison between
+ the confusion matrix obtained for this assignment against the one obtained in the
+ previous lab assignment.
+ * Computational time needed for the training step for noMNIST dataset and com
+parison against the computational time spent in the previous lab assignment.
+ • Bibliographic references or any other material consulted in order to carry out the lab as
+signment different to the one provided by the lecturers (if any).
+ Although the content is important, the presentation, including the style and structure of the
+ documentwillalsobevalued. Thepresenceoftoomanyspellingmistakescandecreasethegrade
+ obtained.
+ 4.2 Executable and source code
+ Together with the report, the two files (main and class) prepared to be run in the UCO’s machines
+ (concretely, test using ssh on ts.uco.es) must be included. In addition, all the source code
+ mustbeincluded. Thescriptdevelopedshouldreceivethefollowingcommand-linearguments10:
+ • Argument-d,--dataset
+ filename: Indicates the name of the file that contains the
+ dataset to be used. This argument is compulsory, and without it, the program can not
+ work.
+ • Argument-s,--standarize: Boolean indicating whether the data sets are to be stan
+dardized (inputs and outputs for regression, only inputs for classification). If not specified,
+ wewill assume that it is not standardized.
+ • Argument-c,--classification: Boolean that indicates whether it is a classification
+ problem. If it is not specified, we will suppose that it is a regression problem.
+ • Argument-r,--ratio
+ rbf: Indicates the radium (by one) of RBF neurons with respect
+ to the total number of patterns in training. If not specified, use 0.1.
+ 10To process the input sequence, the click library will be used.
+ 8
+• Argument-l,--l2: Boolean that indicated if L2 regularisation is used, instead of L1. If it
+ is not specified, L1 will be used.
+ • Argument-e,--eta: Indicates the value for the eta (η) parameter. By default, use η =
+ 1e −2.
+ • Argument-f,--fairness: Boolean that indicated if fairness metrics should be extracted
+ frompredictions. Assumesthatthegroupisstoredasthelastvariableoftheinputvariables.
+ By default, it is disabled.
+ • Argument-v,--logisticcv: BooleanforactivatingtheuseoftheclassLogisticRegressionCV
+ for classification problems. By default, it is assumed that it will not be applied (therefore,
+ LogisticRegression is used).
+ • Argument-n,--seeds: Number of different seeds to be used. By default, n = 5 and the
+ seeds to be used would be from 0 to 4 (both included).
+ • Argumento-cm,--cm
+ out
+ folder: Indicates the directory in which the confusion matri
+ces are saved. This argument is not required, if not specified, the calculation of the confu
+sion matrices will be omited.
+ • (Kaggle) Argument-p,--pred: Integer that indicates the model to be used (the one that
+ has been trained with that seed). Also, the file for which the predictions have to be ob
+tained has to be named as dataset kaggle.csv. This file has to have the same structure than
+ dataset.csv, the one used to train the models.
+ • (Kaggle) Argument-m,--model
+ file: Indicates the directory in which the trained mod
+els are saved (in the training mode, without the flag p) or the file containing the model that
+ will be used (in the prediction mode, with the flag p).
+ • Argument--help: It shows the help of the program (use the one automatically generated
+ by the click library).
+ Anexample of execution can be seen in the following output11:
+ 1
+ 2
+ (python3.11) maccordoba@srvrrycarn04:˜/IMCP3$ python main.py--help
+ Usage: main.py [OPTIONS]
+ 3
+ 4 Run several executions of RBFNN training and testing.
+ 5
+ 6 RBF neural network based on hybrid supervised/unsupervised training. Every
+ 7 run uses a different seed for the random number generator. The results of
+ 8 the training and testing are stored in a pandas DataFrame.
+ 9
+ 10
+ 11
+ 12
+ [...]
+ Options:
+ 13-d,--dataset\textbackslash{}\_filename TEXT Name of the file with training data.
+ 14
+ [required]
+ 15-s,--standarize
+ 16-c,--classification
+ Standarize input variables.
+ Use classification instead of regression.
+ 17-r,--ratio\textbackslash{}\_rbf FLOAT
+ number
+ 18 of patterns. [default: 0.1]
+ 19-l,--l2
+ 20-e,--eta FLOAT
+ 21
+ regression. [default: 0.01]
+ Ratio of RBFs with respect to the total
+ Use L2 regularization for logistic regression.
+ Value of the regularization factor for logistic
+ 11To make the developed code to work in the UCO machines, the packages click and the last version of the package
+ scikit-learn should be installed, using the following commands:
+ pip install scikit-learn--user--upgrade
+ pip install click--user--upgrade
+ 9
+22-f,--fairness Calculatefairnessmetrics.
+ 23-v,--logisticcv UseLogisticRegressionCV.
+ 24-n,--seedsINTEGER Numberofseedstouse. [default:5]
+ 25-m,--model\textbackslash{}\_filenameTEXT Directorynametosavethemodels(orname
+ of
+ 26 thefiletoloadthemodel,iftheprediction
+ 27 modeisactive).
+ 28-p,--predINTEGER Specifiestheseedusedtopredicttheoutput
+ 29 ofthedataset\textbackslash{}\_filename.
+ 30-cm,--cm_out_folderTEXT Nameofthefoldertosaveconfusionmatrices.
+ 31--help Showthismessageandexit.
+ 32
+ 33 #ExamplewithTriagedatasetandfairnessparameter
+ 34 (python3.11)maccordoba@srvrrycarn04:˜/IMCP3$pythonmain.py-d./datasets/triage.csv-c--l2-f
+ 35 Runningontriage-seed:0.
+ 36 Runningontriage-seed:1.
+ 37 Runningontriage-seed:2.
+ 38 Runningontriage-seed:3.
+ 39 Runningontriage-seed:4.
+ 40 ******************
+ 41 Summaryofresults
+ 42 ******************
+ 43 MSE CCR FN0 FN1 FP0 FP1
+ 44 seedpartition
+ 45 0 Train 0.060045 93.995522 66.666667 76.987448 0.604933 0.830565
+ 46 Test 0.068376 93.162393 75.675676 82.926829 0.664011 1.436031
+ 47 1 Train 0.063709 93.629147 68.224299 79.919679 0.826067 0.967199
+ 48 Test 0.062271 93.772894 80.851064 75.000000 0.414938 0.879397
+ 49 2 Train 0.065337 93.466314 74.137931 85.416667 0.547945 0.760456
+ 50 Test 0.061661 93.833944 71.052632 75.308642 0.702247 0.991326
+ 51 3 Train 0.063098 93.690210 73.553719 80.425532 0.504356 0.883838
+ 52 Test 0.067766 93.223443 87.878788 82.558140 0.554785 0.877193
+ 53 4 Train 0.063912 93.608793 70.940171 80.334728 0.732265 0.969646
+ 54 Test 0.063492 93.650794 78.378378 82.926829 0.278940 0.623441
+ 55 MeanTrain 0.063220 93.677997 70.704557 80.616811 0.643113 0.882341
+ 56 Test 0.064713 93.528694 78.767307 79.744088 0.522984 0.961478
+ 57 Std Train 0.001955 0.195548 3.256437 3.033688 0.133406 0.089947
+ 58 Test 0.003143 0.314274 6.256732 4.193987 0.176257 0.297574
+ 59
+ 60 #Enlossiguientesejemplosselanzanvariosproblemasderegresi´ on:
+ 61 (python3.11)maccordoba@srvrrycarn04:˜/IMCP3$pythonmain.py-d./datasets/bouys.csv-r
+ 0.5-s-n3
+ 62 Runningonbouys-seed:0.
+ 63 Runningonbouys-seed:1.
+ 64 Runningonbouys-seed:2.
+ 65 ******************
+ 66 Summaryofresults
+ 67 ******************
+ 68 MSE
+ 69 seedpartition
+ 70 0 Train 0.063646
+ 71 Test 0.514725
+ 72 1 Train 0.064947
+ 73 Test 0.704460
+ 74 2 Train 0.066099
+ 75 Test 0.664160
+ 76 MeanTrain 0.064898
+ 77 Test 0.627781
+ 78 Std Train 0.001227
+ 79 Test 0.099962
+ 80
+ 81 (python3.11)maccordoba@srvrrycarn04:˜/IMCP3$pythonmain.py-d./datasets/bouys.csv-r
+ 0.15-s
+ 82 Runningonbouys-seed:0.
+ 83 Runningonbouys-seed:1.
+ 84 Runningonbouys-seed:2.
+ 10
+85 Runningonbouys-seed:3.
+ 86 Runningonbouys-seed:4.
+ 87 ******************
+ 88 Summaryofresults
+ 89 ******************
+ 90 MSE
+ 91 seedpartition
+ 92 0 Train 0.137546
+ 93 Test 0.191664
+ 94 1 Train 0.135316
+ 95 Test 0.254717
+ 96 2 Train 0.142577
+ 97 Test 0.209315
+ 98 3 Train 0.141903
+ 99 Test 0.202015
+ 100 4 Train 0.137473
+ 101 Test 0.213062
+ 102 MeanTrain 0.138963
+ 103 Test 0.214155
+ 104 Std Train 0.003132
+ 105 Test 0.024099
+ 106
+ 107 (python3.11)dguijo@srvrrycarn04:˜/IMCP3$pythonmain.py-d./datasets/sin.csv-r0.15
+ 108 Runningonsin-seed:0.
+ 109 Runningonsin-seed:1.
+ 110 Runningonsin-seed:2.
+ 111 Runningonsin-seed:3.
+ 112 Runningonsin-seed:4.
+ 113 ******************
+ 114 Summaryofresults
+ 115 ******************
+ 116 MSE
+ 117 seedpartition
+ 118 0 Train 0.012505
+ 119 Test 0.022467
+ 120 1 Train 0.012703
+ 121 Test 0.025110
+ 122 2 Train 0.012367
+ 123 Test 0.023760
+ 124 3 Train 0.013290
+ 125 Test 0.022022
+ 126 4 Train 0.012436
+ 127 Test 0.022403
+ 128 MeanTrain 0.012660
+ 129 Test 0.023152
+ 130 Std Train 0.000374
+ 131 Test 0.001276
+ 4.3 Errorcontrol
+ Itisnecessarytointroduceaquitedetailederrorcontrol.Forexample,ifweareintheprediction
+ modeforKaggle,wehavetoindicateboththefilewherethemodelisandtheseedwewantto
+ useforprediction.
+ 1 (python3.11)dguijo@srvrrycarn04:˜/IMCP3$pythonmain.py-d./datasets/nomnist.csv-r
+ 0.05-s-n2-p1
+ 2 Traceback(mostrecentcalllast):
+ 3 File"/home/dguijo/IMCP3/main.py",line530,in<module>
+ 4 main()
+ 5
+ 6 [...]
+ 7
+ 8 File"/home/dguijo/IMCP3/main.py",line166,inmain
+ 9 raiseValueError("Youhavenotspecifiedthemodeldirectory(-m).")
+ 10 ValueError:Youhavenotspecifiedthemodeldirectory(-m).
+ 11
+Anothercasemaybetoindicateafolderthatdoesnotcontainpre-trainedmodels.Thiswill
+ indicatethatwehavetotrainthemodelandthereforewehavetoremovethepredictionmode
+ forKaggle.
+ 1 (python3.11)dguijo@srvrrycarn04:˜/IMCP3$pythonmain.py-d./datasets/nomnist.csv-r
+ 0.05-s-n2-mmodel5-p1
+ 2 Runningonnomnist-seed:1.
+ 3 Predictionmode.UsingdatasetforKagglein./datasets/nomnist_kaggle.csv
+ 4 Traceback(mostrecentcalllast):
+ 5 File"/home/dguijo/IMCP3/main.py",line530,in<module>
+ 6 main()
+ 7
+ 8 [...]
+ 9
+ 10 File"/home/dguijo/IMCP3/main.py",line404,inload
+ 11 raiseValueError(
+ 12 ValueError:Themodelfilemodel5/nomnist/1.pdoesnotexist.
+ 13 Youcancreateitbyfirstlyusingtheparameter(n=1)andremovingtheflagP(for
+ pred)totrainthemodel.
+ Orcalculatefairnessmetricsforadatasetthatisnotappropriate:
+ 1 (python3.11)dguijo@srvrrycarn04:˜/IMCP3$pythonmain.py-d./datasets/nomnist.csv-r
+ 0.05-s-n2-mmodels-c-f-p 3
+ 2 Traceback(mostrecentcalllast):
+ 3 File"/home/dguijo/IMCP3/main.py",line533,in<module>
+ 4 main()
+ 5
+ 6 [...]
+ 7
+ 8 File"/home/dguijo/IMCP3/main.py",line175,inmain
+ 9 raiseValueError(
+ 10 ValueError:Youcanonlycalculatefairnessmetricswhenusingthecompasdataset.
+ 4.4 [OPTIONAL]Savethemodeltoafile.
+ Duringthetrainingstage, thescriptcansavethemodeltrainedasapickle12.Thiswillallowto
+ usethetrainedmodeltopredicttheoutputsoftheKaggledataset.
+ Tosavethemodel, it isnecessarytousethe-mparameterwiththepathwherethemodels
+ willbesaved.Anexecutionexampleisasfollows:
+ 1 (python3.11)dguijo@srvrrycarn04:˜/IMCP3$pythonmain.py-d./datasets/nomnist.csv-r
+ 0.5-s-n3-mmodels-c
+ 2 Runningonnomnist-seed:0.
+ 3 Modelsavedinmodels/nomnist/0.p
+ 4 Runningonnomnist-seed:1.
+ 5 Modelsavedinmodels/nomnist/1.p
+ 6 Runningonnomnist-seed:2.
+ 7 Modelsavedinmodels/nomnist/2.p
+ 8 ******************
+ 9 Summaryofresults
+ 10 ******************
+ 11 MSE CCR
+ 12 seedpartition
+ 13 0 Train 0.647778 90.111111
+ 14 Test 0.630000 88.333333
+ 15 1 Train 0.601111 90.555556
+ 16 Test 1.043333 84.666667
+ 17 2 Train 0.616667 90.777778
+ 18 Test 0.633333 88.333333
+ 19 MeanTrain 0.621852 90.481481
+ 20 Test 0.768889 87.111111
+ 21 Std Train 0.023762 0.339450
+ 12https://docs.python.org/3/library/pickle.html
+ 12
+22 Test 0.237682 2.116951
+ Oncetheexecutionisfinished, therewillbeafoldernamed“models”containing3pickles
+ (n=3). Eachonecorrespondswiththegeneratedmodel foreachseed. Inorder toobtainthe
+ predictions,oneofthesepicklesshouldbechosen.
+ 1 (python3.11)dguijo@srvrrycarn04:˜/IMCP3$ls-lmodels
+ 2 total1
+ 3 drwxr-xr-x2dguijoayrna6nov1815:40nomnist
+ 4
+ 5 (python3.11)dguijo@srvrrycarn04:˜/IMCP3$ls-lmodels/nomnist
+ 6 total9852
+ 7-rw-r--r--1dguijoayrna5675042nov1815:410.p
+ 8-rw-r--r--1dguijoayrna5675042nov1815:411.p
+ 9-rw-r--r--1dguijoayrna5675042nov1815:412.p
+ 4.5 [OPTIONAL]ObtainingthepredictionsforKaggle.
+ Oncethemodelissavedtoapickle,itispossibletoobtaintheoutputpredictionsfortheKaggle
+ dataset. Forthis,-mand-pparametersshouldbeused. Belowisanexamplewhenthemodel
+ selectedistheonetrainedwiththeseed2,whichwastheoneachievingthebestresults(along
+ withseed0):
+ 1 (python3.11)dguijo@srvrrycarn04:˜/IMCP3$pythonmain.py-d./datasets/nomnist.csv-r
+ 0.5-s-n3-mmodels-c-p2
+ 2 Runningonnomnist-seed:2.
+ 3 Predictionmode.UsingdatasetforKagglein./datasets/nomnist_kaggle.csv
+ 4 Predictionssavedinmodels/nomnist/predictions_2.csv.
+ 5 ******************
+ 6 Summaryofresults
+ 7 ******************
+ 8 MSE CCR
+ 9 seedpartition
+ 10 2 Train 0.616667 90.777778
+ 11 Test 0.633333 88.333333
+ 12
+ 13 (python3.11)dguijo@srvrrycarn04:˜/IMCP3$ls-lmodels/nomnist
+ 14 total13807
+ 15-rw-r--r--1dguijoayrna5675042nov1815:410.p
+ 16-rw-r--r--1dguijoayrna5675042nov1815:411.p
+ 17-rw-r--r--1dguijoayrna5675042nov1815:412.p
+ 18-rw-r--r--1dguijoayrna 15012nov1815:41predictions_2.csv
+ 19
+ 20 (python3.11)dguijo@srvrrycarn04:˜/IMCP3$head./models/nomnist/predictions_2.csv
+ 21 Id,Category
+ 22 0,2
+ 23 1,1
+ 24 2,1
+ 25 3,4
+ 26 4,0
+ 27 5,4
+ 28 6,3
+ 29 7,2
+ 30 8,4
+ ThisfileisreadytobeuploadedtoKaggle.
+ 13

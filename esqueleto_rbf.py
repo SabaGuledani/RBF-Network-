@@ -8,7 +8,12 @@ from scipy.spatial.distance import pdist, squareform
 class RBFNN(BaseEstimator):
     def __init__(
         self,
-        # TODO: Add the necessary parameters and their types
+        classification: bool = False,
+        ratio_rbf: float = 0.1,
+        l2: bool = False,
+        eta: float = 0.01,
+        logisticcv: bool = False,
+        random_state: int = 0,
     ) -> None:
         """
         Constructor of the class
@@ -31,7 +36,12 @@ class RBFNN(BaseEstimator):
             Seed for the random number generator
         """
 
-        # TODO: Complete the code of the constructor. Add the parameters to self.
+        self.classification = classification
+        self.ratio_rbf = ratio_rbf
+        self.l2 = l2
+        self.eta = eta
+        self.logisticcv = logisticcv
+        self.random_state = random_state
         self.is_fitted = False
 
     def fit(self, X: np.array, y: np.array):

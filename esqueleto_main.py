@@ -1,6 +1,14 @@
-# TODO: Load the necessary libraries
+import os
+import pickle
+import numpy as np
+import pandas as pd
+import click
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import accuracy_score, mean_squared_error, confusion_matrix
+from fairlearn.metrics import MetricFrame
 
-from rbf import RBFNN
+from esqueleto_rbf import RBFNN
 
 
 @click.command()
@@ -30,6 +38,72 @@ from rbf import RBFNN
     help="Specifies the seed used to predict the output of the dataset_filename.",
     type=int,
 )  # KAGGLE
+@click.option(
+    "--standarize",
+    "-s",
+    is_flag=True,
+    default=False,
+    help="Standarize input variables.",
+)
+@click.option(
+    "--classification",
+    "-c",
+    is_flag=True,
+    default=False,
+    help="Use classification instead of regression.",
+)
+@click.option(
+    "--ratio_rbf",
+    "-r",
+    default=0.1,
+    show_default=True,
+    help="Ratio of RBFs with respect to the total number of patterns.",
+    type=float,
+)
+@click.option(
+    "--l2",
+    "-l",
+    is_flag=True,
+    default=False,
+    help="Use L2 regularization for logistic regression.",
+)
+@click.option(
+    "--eta",
+    "-e",
+    default=0.01,
+    show_default=True,
+    help="Value of the regularization factor for logistic regression.",
+    type=float,
+)
+@click.option(
+    "--fairness",
+    "-f",
+    is_flag=True,
+    default=False,
+    help="Calculate fairness metrics.",
+)
+@click.option(
+    "--logisticcv",
+    "-v",
+    is_flag=True,
+    default=False,
+    help="Use LogisticRegressionCV.",
+)
+@click.option(
+    "--seeds",
+    "-n",
+    default=5,
+    show_default=True,
+    help="Number of seeds to use.",
+    type=int,
+)
+@click.option(
+    "--cm_out_folder",
+    "-cm",
+    default=None,
+    help="Name of the folder to save confusion matrices.",
+    type=str,
+)
 def main(
     dataset_filename: str,
     standarize: bool,
@@ -42,6 +116,7 @@ def main(
     seeds: int,
     model_filename: str,
     pred: int,
+    cm_out_folder: str,
 ):
     """
     Run several executions of RBFNN training and testing.
@@ -79,13 +154,69 @@ def main(
     pred: int
         If used, it will predict the output of the dataset_filename using the model
         stored in model_filename with the seed indicated in this parameter
+    cm_out_folder: str
+        Name of the folder to save confusion matrices (optional)
     """
 
     # check that when logisticcv is set to True, eta is not included
     if logisticcv and eta != 0.01:
         raise ValueError("You cannot use eta when logisticcv is set to True.")
 
-    # TODO: Complete with at least 10 checks to ensure that the parameters are correct
+    # error validation checks
+    # 1. check that dataset file exists
+    if not os.path.exists(dataset_filename):
+        raise ValueError(f"The dataset file {dataset_filename} does not exist.")
+
+    # 2. check that ratio_rbf is valid (between 0 and 1)
+    if ratio_rbf <= 0 or ratio_rbf > 1:
+        raise ValueError(f"ratio_rbf must be between 0 and 1, got {ratio_rbf}.")
+
+    # 3. check that eta is positive
+    if eta <= 0:
+        raise ValueError(f"eta must be positive, got {eta}.")
+
+    # 4. check that seeds is positive
+    if seeds <= 0:
+        raise ValueError(f"seeds must be positive, got {seeds}.")
+
+    # 5. check that fairness is only used with Triage dataset
+    dataset_name = dataset_filename.split("/")[-1].split(".")[0]
+    if fairness and dataset_name != "triage":
+        raise ValueError(
+            f"You can only calculate fairness metrics when using the triage dataset. "
+            f"Current dataset: {dataset_name}."
+        )
+
+    # 6. check that fairness requires classification
+    if fairness and not classification:
+        raise ValueError("Fairness metrics can only be calculated for classification problems.")
+
+    # 7. check that if pred is used, model_filename must be provided
+    if pred is not None and not model_filename:
+        raise ValueError("You have not specified the model directory (-m).")
+
+    # 8. check that if pred is used, model file must exist
+    if pred is not None and model_filename:
+        model_file_path = f"{model_filename}/{dataset_name}/{pred}.p"
+        if not os.path.exists(model_file_path):
+            raise ValueError(
+                f"The model file {model_file_path} does not exist.\n"
+                f"You can create it by firstly using the parameter (n={pred}) and "
+                f"removing the flag -p (for pred) to train the model."
+            )
+
+    # 9. check that if pred is used, Kaggle dataset file must exist
+    if pred is not None:
+        kaggle_dataset_path = dataset_filename.replace(".csv", "_kaggle.csv")
+        if not os.path.exists(kaggle_dataset_path):
+            raise ValueError(
+                f"The Kaggle dataset file {kaggle_dataset_path} does not exist. "
+                f"It should be named as {os.path.basename(kaggle_dataset_path)}."
+            )
+
+    # 10. check that logisticcv is only used for classification
+    if logisticcv and not classification:
+        raise ValueError("LogisticRegressionCV can only be used for classification problems.")
 
     results = []
 

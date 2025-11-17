@@ -2,7 +2,7 @@ import numpy as np
 from sklearn.base import BaseEstimator
 from sklearn.cluster import KMeans
 from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
-from scipy.spatial.distance import pdist, squareform
+from scipy.spatial.distance import pdist, squareform, cdist
 
 
 class RBFNN(BaseEstimator):
@@ -64,23 +64,29 @@ class RBFNN(BaseEstimator):
         np.random.seed(self.random_state)
         self.num_rbf = int(self.ratio_rbf * y.shape[0])
         print(f"Number of RBFs used: {self.num_rbf}")
-        # 1. Init centroids
-        # TODO: Call the appropriate function
+        
+        # 1. Clustering: Apply KMeans to establish RBF centers
+        self.kmeans = self._clustering(X, y)
 
-        # 2. clustering
-        # TODO: Call the appropriate function
+        # 2. Calculate radii using heuristic formula
+        self.radii = self._calculate_radii()
 
-        # 3. Calculate radii
-        # TODO: Call the appropriate function
+        # 3. Calculate distances from each training pattern to each RBF center
+        distances = cdist(X, self.kmeans.cluster_centers_, metric='euclidean')
 
-        # 4. R matrix
-        # TODO: Call the appropriate function
+        # 4. Calculate R matrix (RBF activations + bias column)
+        self.r_matrix = self._calculate_r_matrix(distances)
 
-        # 5. Calculate betas
+        # 5. Store y_train for potential use in classification
+        self.y_train = y
+
+        # 6. Calculate output layer weights
         if self.classification:
-            # TODO: Call the appropriate function
+            # For classification: use logistic regression
+            self.logreg = self._logreg_classification()
         else:
-            # TODO: Call the appropriate function
+            # For regression: use Moore-Penrose pseudo-inverse
+            self.coefficients = self._invert_matrix_regression(self.r_matrix, y)
 
         self.is_fitted = True
 
@@ -159,15 +165,69 @@ class RBFNN(BaseEstimator):
 
         Returns
         -------
-        centroids: array, shape (num_rbf)
+        centroids: array, shape (num_rbf, n_inputs)
             Array with the centroids selected
         """
-
-        # TODO: Complete the code of the function
+        # convert y_train to class labels if it's one-hot encoded
+        if len(y_train.shape) > 1 and y_train.shape[1] > 1:
+            y_labels = np.argmax(y_train, axis=1)
+        else:
+            y_labels = y_train.flatten()
+        
+        # get unique classes
+        unique_classes = np.unique(y_labels)
+        n_classes = len(unique_classes)
+        
+        # calculate how many centroids per class (proportional to class distribution)
+        centroids_per_class = []
+        remaining = self.num_rbf
+        
+        for i, class_label in enumerate(unique_classes):
+            class_count = np.sum(y_labels == class_label)
+            if i == len(unique_classes) - 1:
+                # last class gets the remaining centroids
+                n_centroids = remaining
+            else:
+                # proportional allocation
+                proportion = class_count / len(y_labels)
+                n_centroids = max(1, int(self.num_rbf * proportion))
+                remaining -= n_centroids
+            centroids_per_class.append(n_centroids)
+        
+        # select patterns from each class
+        selected_indices = []
+        for class_label, n_centroids in zip(unique_classes, centroids_per_class):
+            # get indices of patterns belonging to this class
+            class_indices = np.where(y_labels == class_label)[0]
+            
+            # randomly select n_centroids patterns from this class
+            np.random.seed(self.random_state)
+            selected_class_indices = np.random.choice(
+                class_indices, 
+                size=min(n_centroids, len(class_indices)), 
+                replace=False
+            )
+            selected_indices.extend(selected_class_indices)
+        
+        # if we need more centroids (due to rounding), randomly select from all
+        if len(selected_indices) < self.num_rbf:
+            remaining_needed = self.num_rbf - len(selected_indices)
+            all_indices = np.arange(len(X_train))
+            remaining_indices = np.setdiff1d(all_indices, selected_indices)
+            if len(remaining_indices) > 0:
+                additional = np.random.choice(
+                    remaining_indices,
+                    size=min(remaining_needed, len(remaining_indices)),
+                    replace=False
+                )
+                selected_indices.extend(additional)
+        
+        # get the selected patterns as centroids
+        centroids = X_train[selected_indices[:self.num_rbf]]
         
         return centroids
 
-    def _clustering(self, X_train: np.array, y_train: np.array) -> tuple[KMeans]:
+    def _clustering(self, X_train: np.array, y_train: np.array) -> KMeans:
         """
         Apply the clustering process
 
@@ -188,10 +248,30 @@ class RBFNN(BaseEstimator):
         kmeans: sklearn.cluster.KMeans
             KMeans object after the clustering
         """
-        # TODO: Complete the code of the function
+        if self.classification:
+            # For classification: use stratified initialization
+            init_centroids = self._init_centroids_classification(X_train, y_train)
+            kmeans = KMeans(
+                n_clusters=self.num_rbf,
+                init=init_centroids,
+                n_init=1,  # only one centroid initialisation
+                max_iter=500,
+                random_state=self.random_state
+            )
+        else:
+            # for regression: random initialization
+            kmeans = KMeans(
+                n_clusters=self.num_rbf,
+                init='random',  # random initialization
+                n_init=1,  # only one centroid initialisation
+                max_iter=500,
+                random_state=self.random_state
+            )
+        
+        # fit KMeans to the training data
+        kmeans.fit(X_train)
         
         return kmeans
-
     def _calculate_radii(self) -> np.array:
         """
         Obtain the value of the radii after clustering
@@ -211,19 +291,19 @@ class RBFNN(BaseEstimator):
         # pdist returns a condensed distance matrix, squareform converts it to square matrix
         dist_matrix = squareform(pdist(centers))
         
-        # For each center j, calculate the average distance to all other centers
-        # Formula: σⱼ = ½ × (1/(n₁-1)) × Σᵢ≠ⱼ ||cⱼ - cᵢ||
+        # for each center j, calculate the average distance to all other centers
+        # formula: σⱼ = ½ × (1/(n₁-1)) × Σᵢ≠ⱼ ||cⱼ - cᵢ||
         n_rbf = len(centers)
         radii = np.zeros(n_rbf)
         
         for j in range(n_rbf):
-            # Sum of distances from center j to all other centers (excluding j itself)
+            # sum of distances from center j to all other centers (excluding j itself)
             sum_distances = np.sum(dist_matrix[j, :]) - dist_matrix[j, j]  # Subtract diagonal (0)
-            # Calculate radius: half of average distance
+            # calculate radius: half of average distance
             if n_rbf > 1:
                 radii[j] = 0.5 * (1.0 / (n_rbf - 1)) * sum_distances
             else:
-                # Edge case: if only one RBF, set a default small radius
+                # edge case: if only one RBF, set a default small radius
                 radii[j] = 1.0
         
         return radii
@@ -290,18 +370,18 @@ class RBFNN(BaseEstimator):
             For every output, values of the coefficients for each RBF and value
             of the bias
         """
-        # Calculate Moore-Penrose pseudo-inverse: R^+ = (R^T * R)^(-1) * R^T
-        # Then: β^T = R^+ * Y
-        # Using numpy's pinv for numerical stability
+        # calculate Moore-Penrose pseudo-inverse: R^+ = (R^T * R)^(-1) * R^T
+        # then: β^T = R^+ * Y
+        # using numpy's pinv for numerical stability
         r_pseudo_inv = np.linalg.pinv(r_matrix)
         
-        # Multiply pseudo-inverse by targets: β^T = R^+ * Y
+        # multiply pseudo-inverse by targets: β^T = R^+ * Y
         # r_pseudo_inv shape: (num_rbf+1, n_patterns)
         # y_train shape: (n_patterns, n_outputs)
-        # Result shape: (num_rbf+1, n_outputs)
+        # result shape: (num_rbf+1, n_outputs)
         beta_transpose = r_pseudo_inv @ y_train
         
-        # Transpose to get coefficients in shape (n_outputs, num_rbf+1)
+        # transpose to get coefficients in shape (n_outputs, num_rbf+1)
         coefficients = beta_transpose.T
         
         return coefficients

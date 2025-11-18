@@ -6,7 +6,7 @@ import click
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score, mean_squared_error, confusion_matrix
-from fairlearn.metrics import MetricFrame
+from fairlearn.metrics import MetricFrame, false_negative_rate, false_positive_rate
 
 from esqueleto_rbf import RBFNN
 
@@ -350,21 +350,51 @@ def main(
             train_results_per_seed["CCR"] = accuracy_score(y_train_flat, preds_train_flat) * 100
             test_results_per_seed["CCR"] = accuracy_score(y_test_flat, preds_test_flat) * 100
 
-        # Fairness evaluation
+        # fairness evaluation
         if fairness:
-            # TODO: Define MetricFrame	
+            metrics = {
+                "false negative rate": false_negative_rate,
+                "false positive rate": false_positive_rate,
+            }
 
-            # TODO: Calculate the first fairness metric
-            train_results_per_seed["FN0"] = train_mf.by_group.loc["Men"]["false negative rate"] * 100
-            train_results_per_seed["FN1"] = train_mf.by_group.loc["Women"]["false negative rate"] * 100
-            test_results_per_seed["FN0"] = test_mf.by_group.loc["Men"]["false negative rate"] * 100
-            test_results_per_seed["FN1"] = test_mf.by_group.loc["Women"]["false negative rate"] * 100
+            train_mf = MetricFrame(
+                metrics=metrics,
+                y_true=y_train_flat,
+                y_pred=preds_train_flat,
+                sensitive_features=X_train_disc,
+            )
+            test_mf = MetricFrame(
+                metrics=metrics,
+                y_true=y_test_flat,
+                y_pred=preds_test_flat,
+                sensitive_features=X_test_disc,
+            )
 
-            # TODO: Calculate the second fairness metric
-            train_results_per_seed["FP0"] = train_mf.by_group.loc["Men"]["false positive rate"] * 100
-            train_results_per_seed["FP1"] = train_mf.by_group.loc["Women"]["false positive rate"] * 100
-            test_results_per_seed["FP0"] = test_mf.by_group.loc["Men"]["false positive rate"] * 100
-            test_results_per_seed["FP1"] = test_mf.by_group.loc["Women"]["false positive rate"] * 100
+            train_results_per_seed["FN0"] = (
+                train_mf.by_group.loc["Men"]["false negative rate"] * 100
+            )
+            train_results_per_seed["FN1"] = (
+                train_mf.by_group.loc["Women"]["false negative rate"] * 100
+            )
+            test_results_per_seed["FN0"] = (
+                test_mf.by_group.loc["Men"]["false negative rate"] * 100
+            )
+            test_results_per_seed["FN1"] = (
+                test_mf.by_group.loc["Women"]["false negative rate"] * 100
+            )
+
+            train_results_per_seed["FP0"] = (
+                train_mf.by_group.loc["Men"]["false positive rate"] * 100
+            )
+            train_results_per_seed["FP1"] = (
+                train_mf.by_group.loc["Women"]["false positive rate"] * 100
+            )
+            test_results_per_seed["FP0"] = (
+                test_mf.by_group.loc["Men"]["false positive rate"] * 100
+            )
+            test_results_per_seed["FP1"] = (
+                test_mf.by_group.loc["Women"]["false positive rate"] * 100
+            )
 
         results.append(train_results_per_seed)
         results.append(test_results_per_seed)

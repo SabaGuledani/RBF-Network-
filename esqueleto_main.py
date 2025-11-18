@@ -321,17 +321,18 @@ def main(
                 preds_kaggle = preds_kaggle.flatten()
             
             dir_name = f"{model_filename}/{dataset_name}/predictions_{pred}.csv"
-            # include index in the first column from 1 to length preds_kaggle
+            # include index in the first column starting from 0
             preds_kaggle_with_index = np.column_stack(
-                (np.arange(1, len(preds_kaggle)+1), preds_kaggle)
+                (np.arange(len(preds_kaggle)), preds_kaggle)
             )
+            fmt = "%d" if classification else "%.6f"
             np.savetxt(
                 dir_name,
                 preds_kaggle_with_index,
                 delimiter=",",
-                header="ID,survived",
+                header="Id,Category",
                 comments="",
-                fmt="%d",
+                fmt=fmt,
             )
             print(f"Predictions saved in {dir_name}.")
 
@@ -401,12 +402,20 @@ def main(
 
     results = pd.DataFrame(results)
     if pred is None:
-        metrics = results.columns[2:]
+        metrics = [col for col in results.columns if col not in ["seed", "partition"]]
 
-        mean_std = []
+        mean_df = (
+            results.groupby("partition", as_index=False)[metrics]
+            .mean()
+            .assign(seed="Mean")
+        )
+        std_df = (
+            results.groupby("partition", as_index=False)[metrics]
+            .std()
+            .assign(seed="Std")
+        )
 
-        # TODO: Calculate the mean and standard deviation of the metrics and add them to the
-        #  results DataFrame
+        results = pd.concat([results, mean_df, std_df], ignore_index=True)
 
     results.set_index(["seed", "partition"], inplace=True)
 
